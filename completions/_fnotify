@@ -1,0 +1,37 @@
+#compdef fnotify
+# fnotify zsh 补全：flag 按 spec 带描述补全，带值 flag 按值类型补全
+# （--config 补文件，-e/--flush 给候选值），其余词补全监听路径。
+# 清单与 `fnotify -h` 的选项集合对齐（-e 多值以逗号连接）。
+
+_fnotify() {
+    local -a flags
+    flags=(
+        '(-r --recursive)-r[watch subdirectories recursively]'
+        '(-r)--recursive[watch subdirectories recursively]'
+        '(-g --glob)-g[filter by file name glob, repeatable]:glob:'
+        '(-g)--glob[filter by file name glob, repeatable]:glob:'
+        '--exclude[reverse name filter, repeatable, wins over -g]:glob:'
+        '(-e --events)-e[comma-separated event list]:events:(create modify remove access rename metadata close_write other all)'
+        '(-e)--events[comma-separated event list]:events:(create modify remove access rename metadata close_write other all)'
+        '--debounce[debounce window ms, default 50, min 10]:ms:'
+        '--flush[delivery mode]:mode:(debounce immediate)'
+        '(-x --exec)-x[command template via sh -c per event, %p path %e event]:command:'
+        '(-x)--exec[command template via sh -c per event, %p path %e event]:command:'
+        '--jobs[max concurrent exec processes, default 1]:n:'
+        '--timeout[per-exec timeout seconds, 0 = no limit]:sec:'
+        '--webhook[POST each batch as JSON array to this http URL]:url:'
+        '--oneshot[exit after the first delivered batch]'
+        '--until-idle[exit after SEC seconds without delivered batches]:sec:'
+        '--config[load options from TOML file, CLI overrides]:file:_files'
+        '(-q --quiet)-q[disable JSONL stdout output]'
+        '(-q)--quiet[disable JSONL stdout output]'
+        '(-h --help)-h[show help]'
+        '(-h)--help[show help]'
+        '(-V --version)-V[show version]'
+        '(-V)--version[show version]'
+        '*:path:_files'
+    )
+    _arguments -S $flags
+}
+
+_fnotify "$@"
