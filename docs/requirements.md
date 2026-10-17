@@ -11,24 +11,24 @@
 | 项 | 值 |
 |---|---|
 | 产品形态 | 单二进制 CLI（无 daemon；网络能力仅限可选的 http webhook） |
-| 目标平台 | Linux x86_64（最低工具链见 Cargo.toml 的 rust-version；RPM 交付）；不支持其他平台 |
+| 目标平台 | Linux x86_64（rustc 1.82，RPM 交付）；不支持其他平台 |
 | 前身 | anotify（async-inotify），架构思路继承，代码零复用 |
 | 交付物 | fnotify 0.1.0 二进制 + `fnotify-0.1.0-1.<dist>.x86_64.rpm`（实测构建） |
 
-范围：Linux-only + RPM 交付 + 地板工具链（Cargo.toml rust-version）+ 极简依赖，一次性交付全部功能
+范围：Linux-only + RPM 交付 + MSRV 1.82 + 极简依赖，一次性交付全部功能
 （TOML 配置、CI、webhook、库 API 同版落地）；跨平台明确放弃（design D1 后定位 Linux-only）。
 
 ## §1 目标与非目标
 
 **目标（全部已实现并实测）：**
 
-1. 在 Linux 上以地板工具链（见 Cargo.toml rust-version）离线构建出 RPM，全程不访问网络（vendor + `--offline`）。
+1. 在 Linux 上以 rustc 1.82 离线构建出 RPM，全程不访问网络（vendor + `--offline`）。
 2. 正确捕获监听目录内的文件生命周期事件（create / modify / remove / rename 家族），
    递归与非递归两种模式，**事件零丢失**（实测 S1/S2 场景 100% 捕获）。
 3. 结构化输出（JSONL）与命令触发（exec）两种动作，输出量经去抖聚合显著低于原始事件流
    （实测持续写入场景 203 行 vs 原始 1003 行）。
 4. 极简依赖：直接依赖 5 个 crate（inotify / mio / signal-hook / toml / libc）、Linux 全依赖树
-   14 个 crate（实测 `cargo tree` 计数，全部 MSRV ≤ 地板；libc 本就在传递树中，
+   14 个 crate（实测 `cargo tree` 计数，全部 MSRV ≤ 1.82；libc 本就在传递树中，
    提升为直接依赖仅为 kill(2) 进程组击杀）。
 
 **非目标（明确不做）：**
@@ -41,7 +41,7 @@
 | 库 API（crates.io 发布、公共接口稳定性） | 引擎经 `lib.rs` 可复用，但 API 为 0.x 实验级、未承诺稳定；评估结论：暂不发布 crates.io，维持 `publish = false`，详见 design §9 |
 | inotify 原始掩码粒度（open 等细分） | 8 类事件（create / modify / remove / access / metadata / close_write / rename_from / rename_to）；`close_write` 掩码层 opt-in（s22 固化）；open / close_nowrite 不携带生命周期信息，不订阅（准入判据见 design §3.4） |
 | exec 无界并发 | 不做：并发池有界（`--jobs` 默认 1 串行、池满背压，可预测、防雪崩，s18 固化） |
-| CI 之外的托管依赖 | CI 已落地：GitHub Actions 双档（stable + 地板工具链，见 Cargo.toml rust-version）fmt + 全量测试；本地 `make ci` 门禁合集 |
+| CI 之外的托管依赖 | CI 已落地：GitHub Actions 双工具链（stable + 1.82）fmt + 全量测试；本地 `make ci` 门禁合集 |
 
 ## §2 功能需求（FR）
 
@@ -61,15 +61,15 @@
 | FR-08 | exec 动作：`-x CMD` 对批内每条事件执行 `sh -c CMD`；占位符 `%p`（路径）/`%e`（事件名）；`%p` 以 POSIX 单引号包裹，**文件名内容不可注入 shell 语法**；exec 失败仅记 stderr 继续；`-q` 关闭 JSONL 输出；`--jobs N` 并发上限（默认 1 串行、池满背压），`--timeout SEC` 单 exec 超时（默认 0 不限，超龄者杀） | [测试] `shell_quote` 单测、集成 s6（端到端子进程，含恶意文件名逐字节断言）、s18（并发交错断言 + 超时杀与停机）、main 侧 `exec_pool_*` 3 个单测；[实测] 注入用例 `inj;touch-evil.log` 无法注入 |
 | FR-09 | 信号与退出语义：SIGINT/SIGTERM 优雅停机（清空剩余事件、join worker、exit 0）；第二个信号立即退出（码 130，清空期间到达同样生效）；退出码约定 0=正常 / 1=运行错误 / 2=用法错误 | [测试] s5/s6 覆盖清空路径、s11（worker 崩溃 exit 1）、s12（用法错误 exit 2）；[实测] 信号行为为手工实测（无自动化，`kill -INT`/`-TERM`/双信号三例） |
 | FR-10 | 监听目录被删除：stderr 一行告警（指明目录路径）、摘除该目录，其余目录继续监听；全部监听目录被删时优雅退出（exit 0） | [测试] 集成 s6（单根删除退出）、s15（逐目录摘除 + 摘光退出）；[实测] `rm -rf` 目录场景 |
-| FR-11 | 离线构建与 RPM：`make dist` 产出含 vendored 依赖的源码包；Linux 上 `cargo build --release --offline`（地板工具链）与 `rpmbuild -bb` 全部通过 | [实测] 构建记录（design.md §11）；产物 `fnotify-0.1.0-1.<dist>.x86_64.rpm` |
+| FR-11 | 离线构建与 RPM：`make dist` 产出含 vendored 依赖的源码包；Linux 上 `cargo build --release --offline`（rustc 1.82）与 `rpmbuild -bb` 全部通过 | [实测] 构建记录（design.md §11）；产物 `fnotify-0.1.0-1.<dist>.x86_64.rpm` |
 
 ## §3 非功能需求（NFR）
 
 | # | 需求 | 验收方式与实测值 |
 |---|---|---|
-| NFR-01 | MSRV = `Cargo.toml` 的 `rust-version`（单一事实源；main 为 edition 2024，`msrv-1.82` 分支保留 1.82 兼容基线）；Cargo.lock 入库 + 依赖精确 pin + 仓库根 `.cargo/config.toml` 启用 MSRV 感知解析（resolver fallback） | [实测] 地板工具链 `cargo test --locked --offline` 全量三遍全绿（msrv-1.82 分支，rustc 1.82）；直接依赖 MSRV：inotify 1.70 / mio 1.71 / signal-hook 1.66 / toml 1.76 / libc 1.63，均低于两分支地板 |
+| NFR-01 | MSRV 1.82（RPM 构建链硬约束）；`rust-version` 声明 + Cargo.lock 入库 + 依赖精确 pin + 仓库根 `.cargo/config.toml` 启用 MSRV 感知解析（resolver fallback） | [实测] rustc 1.82 `cargo test --locked --offline` 全量三遍全绿；直接依赖 MSRV：inotify 1.70 / mio 1.71 / signal-hook 1.66 / toml 1.76 / libc 1.63（传递链 serde_spanned、toml_datetime、toml_parser 均 1.76，winnow 1.65），均低于 1.82 |
 | NFR-02 | 依赖预算：直接依赖 5 个、Linux 目标全树 14 crate（toml 门面及其 5 个传递依赖 + libc），白名单外零引入 | [实测] `cargo tree --target x86_64-unknown-linux-gnu` 计数（口径：依赖 crate 不含 fnotify 自身；libc 由 inotify 传递依赖提升，不增全树规模） |
-| NFR-03 | 资源基线：峰值 RSS ≤ 3MB；二进制 ≤ 1MB；持续写入场景输出行数 ≤ 原始事件数 1/4 | [实测] **release 二进制 854,984 B（835 KiB，≤1MB 达标；edition 2024 工具链构建）**；受控树 RSS 2.2MB（实测 2248KB，S1/S3 零增长）；输出 203 vs 1003 行（同口径复测 167 vs 1000，波动） |
+| NFR-03 | 资源基线：峰值 RSS ≤ 3MB；二进制 ≤ 1MB；持续写入场景输出行数 ≤ 原始事件数 1/4 | [实测] **release 二进制 908,128 B（887 KiB，≤1MB 达标）**；受控树 RSS 2.2MB（实测 2248KB，S1/S3 零增长）；输出 203 vs 1003 行（同口径复测 167 vs 1000，波动） |
 | NFR-04 | 可靠性：引擎路径零 `unwrap`/`expect`/`panic!`；事件零丢失 | [实测] grep 复核（唯一 panic 在测试断言）；S1/S2 捕获率 100% |
 | NFR-05 | 可测试性：全部测试在 Linux 跑通；结果三遍稳定 | [实测] 三遍全绿 |
 | NFR-06 | 可观测性：stdout 仅含 JSONL（可管道/重定向）；告警与错误一律走 stderr | [实测] 基准脚本 `stderr_bytes=0`；错误路径输出核对 |
@@ -78,8 +78,8 @@
 
 | 验收项 | 通过标准 | 证据 |
 |---|---|---|
-| 单元+集成测试 | 全绿，三遍稳定 | 81 单测 + 27 集成 + 5 lib API（地板工具链，另 doctest 1） |
-| 离线构建 | `cargo build --release --offline` 成功（地板工具链） | 实测；二进制 835KiB（854,984 B，≤1MB ✓） |
+| 单元+集成测试 | 全绿，三遍稳定 | 81 单测 + 27 集成 + 5 lib API（rustc 1.82，另 doctest 1） |
+| 离线构建 | `cargo build --release --offline` 成功（rustc 1.82.0） | 实测；二进制 887KiB（908,128 B，≤1MB ✓） |
 | inotify 冒烟 | 全生命周期事件正确（create/modify/rename_from/rename_to/remove/递归） | 冒烟输出记录（design.md §8、§12） |
 | 信号/根删除 | INT/TERM 优雅 exit 0；双信号 130；根删除告警退出 | 实测（含双信号 130 复验） |
 | RPM 交付 | `rpmbuild -bb` 出包，可查询元数据 | `fnotify-0.1.0-1.<dist>.x86_64.rpm`（`rpm -qip` License: MulanPSL-2.0） |
@@ -104,5 +104,5 @@
 | 短 flag 粘连 | 支持：布尔短 flag 可粘连（`-rq` = `-r -q`；含取值型短 flag 或未知字母仍 exit 2） | — |
 | 配置 | CLI flag + `--config FILE`（TOML 配置文件，命令行优先，s20 固化） | — |
 | webhook | `--webhook URL` 已落地（内网 http 零依赖手写，s19 固化） | https 引入 TLS 栈再评审 |
-| CI | GitHub Actions 双档（stable + 地板工具链，见 Cargo.toml rust-version）fmt + 全量测试；本地 `make ci` 门禁合集 | — |
+| CI | GitHub Actions 双工具链（stable + 1.82）fmt + 全量测试；本地 `make ci` 门禁合集 | — |
 | spec URL | 已定为 https://github.com/jiachao2130/fnotify | — |

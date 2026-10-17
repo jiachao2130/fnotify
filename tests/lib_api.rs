@@ -13,8 +13,8 @@
 //! （engine/cli/watch/config/hook/locale/wildmatch），公开面回归由 grep 本文件兜底。
 
 use fnotify::{Config, Error, Event};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 fn sink_noop() -> fnotify::Sink {

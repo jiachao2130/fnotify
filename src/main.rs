@@ -420,7 +420,7 @@ fn shell_quote_path(path: &std::path::Path) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BatchItem, ExecPool, render_template, shell_quote_path};
+    use super::{render_template, shell_quote_path, BatchItem, ExecPool};
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
     use std::path::PathBuf;

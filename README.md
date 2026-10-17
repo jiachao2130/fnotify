@@ -198,7 +198,7 @@ make check    # cargo fmt --check && cargo clippy --all-targets -D warnings && c
 make ci       # 门禁合集 = check + msrv（push 前在 Linux 机器上过一遍）
 make vendor   # cargo vendor vendor/ + 生成 build/.cargo/config.toml（offline 配置，不污染仓库根）
 make dist     # 组装 dist/fnotify-0.1.0.tar.gz（src + tests + Cargo.toml + Cargo.lock + vendor/ + .cargo/ + spec + completions）
-make msrv     # cargo +<地板工具链> check --locked（Linux 机器；地板见 Cargo.toml 的 rust-version）
+make msrv     # cargo +1.82 check --locked（Linux 机器）
 ```
 
 在 Linux 构建机上出 RPM：一键 `bash scripts/make-srpm.sh`（组装含 vendored
@@ -207,19 +207,17 @@ make msrv     # cargo +<地板工具链> check --locked（Linux 机器；地板�
 `fnotify.spec` 放 `~/SPECS/`（topdir 实测跟随 cwd：rpm 内置默认取 PWD，
 无 `~/.rpmmacros` 覆盖——构建前先 `rpm --eval '%_topdir'` 确认落点，固定 cwd
 后执行 rpmbuild），`rpmbuild -bb`；`%build` 为 `cargo build --release`
-（vendored 依赖随源码包提供，全程无网；spec 声明 `BuildRequires: rust`）。已在
-地板工具链下实测出包：
+（vendored 依赖随源码包提供，全程无网；spec 声明 `BuildRequires: rust`）。已在 rustc 1.82 下实测出包：
 `fnotify-0.1.0-1.<dist>.x86_64.rpm`（dist 标签随构建系统）。RPM 同时安装
 bash/zsh 补全；手动安装可 `source completions/fnotify.bash`，或把
 `completions/_fnotify` 加入 zsh 的 `$fpath`。
 
-CI：`.github/workflows/ci.yml` 已就绪（push / PR 触发，stable + 地板工具链双档
+CI：`.github/workflows/ci.yml` 已就绪（push / PR 触发，stable + 1.82 双工具链
 fmt + test），仓库地址 https://github.com/jiachao2130/fnotify。
 
 ## MSRV 策略
 
-- 最低工具链版本由 `Cargo.toml` 的 `rust-version` 声明（单一事实源），main 为
-  edition 2024；`msrv-1.82` 分支保留 1.82 兼容基线（RPM 构建链锚点）。
+- MSRV **1.82**（`Cargo.toml` 声明 `rust-version`），edition 2021。
 - `Cargo.lock` 入库、`inotify` 精确 pin（`mio` 锁 minor）：事件分类依赖内核语义的封装行为，
   锁死保证各构建机行为一致，也让 vendored 源码包可复现。
 - 升级 MSRV 需伴随一次全平台测试通过并更新本文件。

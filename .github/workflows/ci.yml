@@ -1,6 +1,5 @@
 # fnotify CI：Linux-only 项目，ubuntu runner 即可覆盖 fmt + 全量测试 + MSRV 编译。
-# --locked 使用入库的 Cargo.lock，不在 CI 里重新解析依赖（MSRV 感知解析见
-# 仓库根 .cargo/config.toml 的 resolver fallback；地板见 Cargo.toml rust-version）。
+# --locked 使用入库的 Cargo.lock，不在 CI 里重新解析依赖（D3：1.82 无 MSRV 感知解析）。
 name: ci
 
 on:
@@ -13,14 +12,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable, "1.85"]
+        toolchain: [stable, "1.82"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
           components: rustfmt,clippy
-      # fmt/clippy 只在 stable 腿跑：地板腿的组件版本可能落后于本机，
+      # fmt/clippy 只在 stable 腿跑：1.82 腿的组件版本可能落后于本机，
       # fmt 有误报格式漂移的风险，clippy 有新 lint 口径漂移的风险
       - if: matrix.toolchain == 'stable'
         run: cargo fmt --check

@@ -43,11 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Quality
 
-- 114 例测试（81 单测 + 27 集成 + 5 lib API + 1 doctest），地板工具链
-  离线 `--locked` 三遍全绿（msrv-1.82 分支，rustc 1.82）；s26（oneshot 持续写入流有界退出）的回归防线
+- 114 例测试（81 单测 + 27 集成 + 5 lib API + 1 doctest），rustc 1.82
+  离线 `--locked` 三遍全绿；s26（oneshot 持续写入流有界退出）的回归防线
   经红绿实测坐实（旧实现下必挂）。
-- 资源基线实测：二进制 854,984 B（835 KiB，≤1MB；edition 2024 工具链构建，
-  msrv-1.82 分支同代码为 908,128 B）；受控树 RSS 2.2MB（≤3MB）；
+- 资源基线实测：二进制 908,128 B（887 KiB，≤1MB）；受控树 RSS 2.2MB（≤3MB）；
   持续写输出 ≤ 原始 1/4。
 - 引擎路径零 `unwrap`/`expect`/`panic!`（lint 强制）；错误一律 stderr，
   stdout 仅 JSONL。

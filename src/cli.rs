@@ -380,7 +380,7 @@ pub(crate) fn parse_events(list: &str) -> Result<u32, String> {
                     "非法事件名: {t}（可选 {choices}）",
                     t = t,
                     choices = EVENT_CHOICES
-                ));
+                ))
             }
         }
     }
