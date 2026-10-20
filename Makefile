@@ -12,7 +12,7 @@
 # check/msrv/dist 都要在 Linux 上跑；本机（macOS）仅可编辑。
 #
 # vendor : cargo vendor + 把 offline 配置写进 build/.cargo（不污染仓库根）
-# dist   : 组装 dist/fnotify-0.1.0.tar.gz（src + tests + Cargo.toml + Cargo.lock + vendor + .cargo + rpm + LICENSE）
+# dist   : 组装 dist/fnotify-0.1.0.tar.gz（src + tests + Cargo.toml + Cargo.lock + vendor + .cargo + spec + patches + LICENSE）
 #          （tests/ 随包提供：验收与冒烟可在包内直接跑全量测试）
 # check  : cargo fmt --check && cargo clippy -D warnings && cargo test --locked
 # msrv   : 用 1.82 工具链做编译级检查
@@ -43,6 +43,11 @@ dist: vendor
 	cp -a src tests Cargo.toml Cargo.lock LICENSE README.md fnotify.spec completions $(STAGE)/
 	cp -a vendor $(STAGE)/
 	cp -a build/.cargo $(STAGE)/.cargo
+# spec 的 sw64 补丁（Patch0）在 %prep 阶段改写 vendored libc 源码，必须跳过
+# libc 的文件级校验（包级校验仍走 checksum 里的 package sha256）。只改 STAGE
+# 里的副本，仓库根 vendor/ 保持 cargo vendor 的 pristine 状态。
+	python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["files"]={}; json.dump(d,open(p,"w"))' $(STAGE)/vendor/libc/.cargo-checksum.json
+	cp -a patches $(STAGE)/
 # macOS 打包时清掉扩展属性，避免 Linux 端 GNU tar 逐文件告警
 	if command -v xattr >/dev/null 2>&1; then xattr -cr $(STAGE); fi
 	tar -czf $(TARBALL) -C dist fnotify-$(VERSION)

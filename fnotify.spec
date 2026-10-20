@@ -19,8 +19,13 @@ Summary:        File event router: watch -> debounce -> glob filter -> JSONL / e
 License:        MulanPSL-2.0
 URL:            https://github.com/jiachao2130/fnotify
 Source0:        %{name}-%{version}.tar.gz
+# 申威（sw64）支持：给 vendored libc 0.2.190 补 sw64 信号号 / socket 类型定义。
+# 补丁内部按 target_arch = "sw64" 门控，其它架构应用后产物不变；
+# 对应补丁目标的 new/glibc sysdeps 布局仅 0.2.190 起存在，升 libc 须重制补丁
+Patch0:         libc-0.2.190-sw64.patch
 BuildRequires:  rust
 BuildRequires:  cargo
+BuildRequires:  patch
 
 %description
 fnotify watches directories via inotify (Linux), debounces and
@@ -29,7 +34,7 @@ and/or runs a command per event. Synchronous thread model,
 five direct dependencies (inotify, mio, signal-hook, toml, libc).
 
 %prep
-%setup -q
+%autosetup -p1
 
 %build
 cargo build --release
