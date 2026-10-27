@@ -1,11 +1,10 @@
 # 设计方案：fnotify —— Linux 文件事件路由器
 
-> 设计定稿：Linux-only、最低工具链见 Cargo.toml 的 rust-version（main 为 edition 2024；
-> `msrv-1.82` 分支保留 1.82 基线）、RPM 交付、极简依赖；
+> 设计定稿：Linux-only、rustc 1.82、RPM 交付、极简依赖；
 > 跨平台已随 D1 反转明确放弃（requirements 非目标首行），TOML 配置 / CI /
 > crates.io 评估结论见 §9。
-> 原则：直接依赖白名单 5 个（inotify / mio / signal-hook / toml / libc）+ std；同步线程模型，全项目零 async；MSRV 由 rust-version 声明 + Cargo.lock 保障
-> 文中所有数字来自 x86_64 Linux 实测，复现命令见 §8/§11。
+> 原则：直接依赖白名单 5 个（inotify / mio / signal-hook / toml / libc）+ std；同步线程模型，全项目零 async；MSRV 1.82 冻结
+> （Cargo.lock 是保障）；文中所有数字来自 x86_64 Linux 实测，复现命令见 §8/§11。
 
 ---
 
@@ -45,9 +44,9 @@
 | # | 决策 | 替代方案 | 依据 |
 |---|---|---|---|
 | D1 | 事件源直接 `inotify = 0.11.5` + `mio` 轮询，自建 watcher 层（`src/watch.rs`） | `notify = 8.2.0`（备选，已否决：重评后认为 anotify 死因是四缺陷的防护栏缺失而非自研 watcher 本身）/ 裸 inotify-sys | 否决理由：曾认为"自研递归是 anotify 死因"，重评后认定死因是四缺陷的**防护栏缺失**而非自研本身——wd 映射、递归铺开、新建子目录接管、移出清理集中在一个模块后，连同 s7/s8/s9 集成固化；收益：依赖树 14→8、去掉 watcher 线程与 mpsc 通道、notify 双报产生的泛化 rename 及其批内去重代码整体删除。inotify 0.11.5 MSRV 1.70 ✓；`=0.11.5` 精确锁，mio 锁 minor（1.71） |
-| D2 | 同步线程模型（3 线程 + mpsc） | tokio（anotify 原方案） | 并发单元仅 2–3 个（1 事件源 + N 动作 + 1 信号），tokio 的收益区间在千级并发 I/O；实测 RSS 2.3MB vs anotify(tokio) 3.8MB（1.82 地板时期另有"tokio 1.54+ 超线"的锁版论据，地板抬升后决策靠架构论据独立成立） |
-| D3 | `rust-version` 声明 + Cargo.lock 锁版 + 精确 pin | 追新；或仅声明 rust-version | 地板见 Cargo.toml（单一事实源）；main 用 cargo 的 MSRV 感知解析（`.cargo/config.toml` resolver fallback，cargo ≥1.84 稳定），`cargo update` 自动回避超线版本；1.82 兼容基线由 `msrv-1.82` 分支冻结承担（该分支保留原 rationale：RPM 构建链 = 系统 rustc，源码包构建不可升级，且 Cargo 1.82 无 MSRV 感知解析） |
-| D4 | 手写 CLI 解析（~120 行含 help） | clap `~4.5`（锁版可用） | flag 面 ~10 个；预算"直接依赖 ≤ 3" |
+| D2 | 同步线程模型（3 线程 + mpsc） | tokio（anotify 原方案） | 并发单元仅 2–3 个（1 事件源 + N 动作 + 1 信号），tokio 的收益区间在千级并发 I/O；tokio 1.54+ 要求 MSRV 1.85，锁 1.82 等于主动引入一个迟早要换的依赖；实测 RSS 2.3MB vs anotify(tokio) 3.8MB |
+| D3 | MSRV 1.82 冻结 + Cargo.lock 锁版 | 追新；或仅声明 rust-version | RPM 构建链 = 系统 rustc 1.82.0（源码包构建，非 rustup，不可升级）；**Cargo 1.82 无 MSRV 感知解析（1.84 才稳定）**——实测：resolver 曾拉到 notify-types 2.1.0（要求 1.85），固定 2.0.0 后 `+1.82 test` 全绿 |
+| D4 | 手写 CLI 解析（~120 行含 help） | clap `~4.5`（MSRV 1.74，锁版可用） | flag 面 ~10 个；clap 4.6+ 需 1.85 永久锁死 4.5；预算"直接依赖 ≤ 3" |
 | D5 | 手写 `wildmatch`（`* ? [...] [!...]`，~50 行 + 10 单测） | `glob` crate（零传递）/ `regex` 一族（5+ crate） | glob 语义覆盖文件名匹配 90% 场景；regex 树违背 NFR-02 且引入"匹配全路径还是文件名"语义坑（anotify 实测踩过） |
 | D6 | 手写 JSONL 转义（~20 行 + 5 单测） | serde_json（4–5 crate，MSRV 无虞） | 输出形状固定、`type` 判别先行、零 serde；预算优先 |
 | D7 | trailing-edge 去抖 + 批次时长封顶 | leading-edge（立即发）/ 无去抖（anotify） | 监控场景要的是聚合降噪（实测 S3：203 vs 1003 行）；时长封顶保证繁忙流下批次延迟以窗口为界（s5 回归固化）；`--flush immediate` 已落地（s13 固化）：每个（路径,事件名）首事件立即交付，窗口内同键抑制 |
@@ -278,19 +277,19 @@ toml = { version = "~1.0", default-features = false, features = ["std", "parse",
 libc = "0.2"           # kill(2) 进程组击杀：本就在传递树中（inotify 依赖），提升为
 # 直接依赖替代外部 kill(1) 调用（不经 PATH 查找、无 shell-out 开销）；MSRV 1.63
 # 传递链 toml → serde_core / serde_spanned / toml_datetime / toml_parser / winnow，
-# 全链 MSRV ≤ 地板（见 Cargo.toml rust-version；锁文件固化）；仓库根 .cargo/config.toml 启用
+# 全链 MSRV ≤ 1.82（锁文件固化）；仓库根 .cargo/config.toml 启用
 # resolver.incompatible-rust-versions = "fallback"，cargo update 自动回避超线版本。
 ```
 
-**不引入清单**（每项附理由）：`tokio`（D2：规模错位）、
+**不引入清单**（每项附理由）：`tokio`（D2：规模错位 + 1.54 起 MSRV 1.85 迟早要换）、
 `clap`（D4）、`regex`（D5）、`glob`（D5：能用但手写 50 行换零依赖更合算）、
 `ureq`/`rustls`（webhook 已用手写最小 HTTP 客户端落地 http://；https 需要 TLS 栈时再
-评审，ureq 3.3 MSRV 1.85 在 main 地板以内，引入时再评估）、
+评审，ureq 3.3 MSRV 1.85 超线，届时评估 ureq 2.x 或其他）、
 `path-absolutize`（std canonicalize 入口一次足矣——anotify 的它恰是相对路径
 崩溃链一环）。Linux 全树 14 crate（`cargo tree --target x86_64-unknown-linux-gnu` 实测，
 口径为依赖 crate 不含 fnotify 自身：notify 时代 14 → 反转直连 inotify 后 8（去掉
 notify/notify-types/log/walkdir/same-file）→ 引入 TOML 配置后 14（净增 toml 门面与
-serde_core/serde_spanned/toml_datetime/toml_parser/winnow，均 MSRV ≤ 地板）。
+serde_core/serde_spanned/toml_datetime/toml_parser/winnow，均 MSRV ≤ 1.82））。
 
 ## §7 测试计划
 
@@ -311,7 +310,7 @@ S2 递归（2 子目录 200 文件）、S3 持续（10s 内 1000 次追加）；
 
 | 指标 | fnotify | anotify | 备注 |
 |---|---|---|---|
-| 二进制 | **0.1.0 实测 859,928 B（840 KB；edition 2024 工具链）** | 3.9 MB | lto+strip；≤1MB 门槛达标 |
+| 二进制 | **0.1.0 实测 912,224 B（891 KB）** | 3.9 MB | lto+strip；≤1MB 门槛达标 |
 | 首事件延迟（默认） | 51 ms | 3 ms | fnotify = 50ms 窗口 + ~1ms 管道；`--debounce 10` 实测 **11–14 ms**（三连测），纯管道开销 2–4ms |
 | 首事件延迟（`--flush immediate`） | **2–3 ms**（三连测，含外部轮询开销） | — | 引擎看到事件本身 +0~1ms（JSONL ts 与写入前打点同帧）；immediate 交付 ≈ 纯管道开销，达成 ≤ 5ms 目标（s13 固化语义） |
 | S1 捕获率 | **100%**（501/501/250） | 100%（501/1001/250） | anotify 1001 行 MODIFY 为内核原始流（建文件写入也计一次） |
@@ -320,7 +319,7 @@ S2 递归（2 子目录 200 文件）、S3 持续（10s 内 1000 次追加）；
 | 峰值 RSS | **2.1–2.3 MB** | 3.7–3.8 MB | 无 tokio 运行时 |
 | 递归捕获 | 100% | 100%（仅绝对路径 + 静态树前提） | anotify 四缺陷见 §12 |
 
-**验收门槛（NFR-03）**：RSS ≤ 3MB ✓（0.1.0 实测 2.2MB）；二进制 ≤ 1MB ✓（0.1.0 实测 840 KB）；持续写输出 ≤ 原始 1/4 ✓（0.20）。
+**验收门槛（NFR-03）**：RSS ≤ 3MB ✓（0.1.0 实测 2.2MB）；二进制 ≤ 1MB ✓（0.1.0 实测 891 KB）；持续写输出 ≤ 原始 1/4 ✓（0.20）。
 延迟不设门槛（设计参数，非开销）；`--flush immediate` 交付延迟 2–3ms，达成 ≤ 5ms 目标。
 
 > 实测附记（同口径多轮复测，结果稳定）：延迟（51/11ms）、RSS、S1/S2 捕获率与上表
@@ -350,7 +349,7 @@ S2 递归（2 子目录 200 文件）、S3 持续（10s 内 1000 次追加）；
 
 | 风险 | 概率 | 缓解 |
 |---|---|---|
-| 生态 MSRV 漂移（clap 4.6 / toml 1.1 / ureq 3.3 / tokio 1.54 已集体 1.85） | 确定（进行中） | 锁版策略：不追新 major；依赖升级必伴随地板工具链 `cargo test --locked` 全绿；仓库根 `.cargo/config.toml` 已启用 `resolver.incompatible-rust-versions = "fallback"`，cargo（≥1.84）update 时自动回避超线版本——toml 传递链即靠此锁在地板以下的一系列；引入新依赖前仍先查 MSRV |
+| 生态 MSRV 漂移（clap 4.6 / toml 1.1 / ureq 3.3 / tokio 1.54 已集体 1.85） | 确定（进行中） | 冻结策略：不追新版本；升级必伴随 `+1.82 test` 全绿；仓库根 `.cargo/config.toml` 已启用 `resolver.incompatible-rust-versions = "fallback"`，cargo（≥1.84）update 时自动回避超线版本——toml 传递链即靠此锁在 MSRV ≤ 1.82 的一系列；引入新依赖前仍先查 MSRV |
 | `fs.inotify.max_user_watches` 耗尽（默认 8192/65536） | 中（大树） | 直连 inotify 无 PollWatcher 式回退（notify 已移除）：注册失败按根报错（exit 1）而非静默降级；已落人话提示——报错带出当前配额值与 sysctl 修法（enospc_hint）；分批注册未做，大树仍需调大 sysctl |
 | inotify/mio 小版本事件语义漂移 | 低（inotify `=0.11.5`、mio 锁 minor） | 锁版；升级视为破坏性变更走全套测试 |
 
@@ -358,7 +357,7 @@ S2 递归（2 子目录 200 文件）、S3 持续（10s 内 1000 次追加）；
 
 ```sh
 make check   # cargo fmt --check && cargo clippy --all-targets -D warnings && cargo test（Linux；macOS 编不了，D1 后仅可编辑）
-make msrv    # cargo +<地板> check --locked（Linux 机器；地板见 Cargo.toml rust-version）
+make msrv    # cargo +1.82 check --locked（Linux 机器）
 make vendor  # cargo vendor --locked + build/.cargo offline 配置
 make dist    # dist/fnotify-0.1.0.tar.gz（src+tests+lock+vendor+.cargo+rpm；打包前 xattr -cr 清 mac 元数据）
 ```
@@ -373,7 +372,7 @@ tarball → `~/SOURCES/`，仓库根的 `fnotify.spec` → `~/SPECS/`，`rpmbuil
 `BuildRequires: rust`）。
 产物：`~/RPMS/x86_64/fnotify-0.1.0-1.<dist>.x86_64.rpm`（dist 标签随构建系统；
 `rpm -qip` 可见 License: MulanPSL-2.0）。spec 无 `rust-toolset`/
-`%{rust_arches}`（构建环境无此宏/包，系统 rustc 满足地板即可，见 Cargo.toml）。
+`%{rust_arches}`（构建环境无此宏/包，系统 rustc 1.82 直接可用）。
 
 ## §12 关键设计取舍的实证依据
 

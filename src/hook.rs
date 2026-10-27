@@ -15,7 +15,7 @@
 //! 连接、读写、等响应各有硬上限 10s（等响应为整体墙钟，防慢滴流拖长），
 //! 失败由调用方记 stderr 后继续，不打断事件流。
 
-use crate::engine::{BatchItem, jsonl_line};
+use crate::engine::{jsonl_line, BatchItem};
 use crate::locale::pick;
 use crate::pickf;
 use std::io::{Read, Write};
@@ -157,7 +157,7 @@ pub fn post_batch(ep: &Endpoint, items: &[BatchItem]) -> Result<(), String> {
                 last_err.unwrap_or_else(|| {
                     std::io::Error::new(std::io::ErrorKind::TimedOut, "connect timed out")
                 }),
-            ));
+            ))
         }
     };
     let _ = stream.set_write_timeout(Some(TIMEOUT));
@@ -259,7 +259,7 @@ fn io_err(ep: &Endpoint, e: std::io::Error) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Endpoint, parse_endpoint, post_batch};
+    use super::{parse_endpoint, post_batch, Endpoint};
     use crate::engine::BatchItem;
     use std::io::{Read, Write};
     use std::net::TcpListener;

@@ -1,4 +1,4 @@
-# MSRV 感知解析：cargo update 时优先选择兼容 Cargo.toml rust-version 的依赖版本，
-# 避免把超线的传递依赖写进 Cargo.lock。
+# MSRV 感知解析：cargo update 时优先选择兼容 rust-version = "1.82" 的依赖版本，
+# 避免把 edition2024 / 更高 MSRV 的传递依赖写进 Cargo.lock。
 [resolver]
 incompatible-rust-versions = "fallback"

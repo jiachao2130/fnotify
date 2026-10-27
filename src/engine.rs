@@ -32,9 +32,9 @@ use crate::watch;
 use crate::wildmatch::wildmatch;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -220,7 +220,7 @@ pub fn run(opts: Options, sink: Sink) -> Result<(), String> {
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             // 引擎线程在汇报前崩溃：
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                break Err(pick("engine thread died unexpectedly", "引擎线程异常退出").into());
+                break Err(pick("engine thread died unexpectedly", "引擎线程异常退出").into())
             }
         }
     };
@@ -821,8 +821,8 @@ pub fn json_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        Aggregator, BIT_CREATE, BIT_RENAME, BatchItem, DEFAULT_EVENTS, EVENT_OVERFLOW,
-        exec_end_line, exec_start_line, format_ts, json_escape, jsonl_line, passes,
+        exec_end_line, exec_start_line, format_ts, json_escape, jsonl_line, passes, Aggregator,
+        BatchItem, BIT_CREATE, BIT_RENAME, DEFAULT_EVENTS, EVENT_OVERFLOW,
     };
     use std::path::{Path, PathBuf};
     use std::sync::mpsc;

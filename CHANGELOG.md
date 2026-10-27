@@ -80,10 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Quality
 
-- 129 例测试（87 单测 + 35 集成 + 6 lib API + 1 doctest），离线
-  `--locked` 全绿；s26（oneshot 持续写入流有界退出）的回归防线经红绿
-  实测坐实（旧式无界收尾实现下必挂）。
-- 资源基线实测：二进制 859,928 B（840 KiB，≤1MB；edition 2024 工具链
-  构建）；受控树 RSS 2.2MB（≤3MB）；持续写输出 ≤ 原始 1/4。
+- 129 例测试（87 单测 + 35 集成 + 6 lib API + 1 doctest），rustc 1.82
+  离线 `--locked` 三遍全绿；s26（oneshot 持续写入流有界退出）的回归防线
+  经红绿实测坐实（旧式无界收尾实现下必挂）。
+- 资源基线实测：二进制 912,224 B（891 KiB，
+  ≤1MB；rustc 1.82 构建）；受控树 RSS 2.2MB（≤3MB）；持续写输出 ≤ 原始 1/4。
 - 引擎路径零 `unwrap`/`expect`/`panic!`（lint 强制）；错误一律 stderr，
   stdout 仅 JSONL。

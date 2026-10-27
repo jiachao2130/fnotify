@@ -68,5 +68,5 @@ pub mod watch;
 #[doc(hidden)]
 pub mod wildmatch;
 
-pub use api::{Config, Error, run, run_with_shutdown};
+pub use api::{run, run_with_shutdown, Config, Error};
 pub use engine::{BatchItem as Event, Sink};

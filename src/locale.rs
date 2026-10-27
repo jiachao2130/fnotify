@@ -77,7 +77,11 @@ fn decide(
 
 /// 模板分叉：按 locale 二选一（help/usage 横幅、无占位符消息用）。
 pub fn pick(en: &'static str, zh: &'static str) -> &'static str {
-    if is_zh() { zh } else { en }
+    if is_zh() {
+        zh
+    } else {
+        en
+    }
 }
 
 /// `pick` 的格式化版：en/zh 模板均为字面量、占位符逐一同序，按 locale

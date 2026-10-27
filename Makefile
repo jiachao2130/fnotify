@@ -15,7 +15,7 @@
 # dist   : 组装 dist/fnotify-$(VERSION).tar.gz（src + tests + Cargo.toml + Cargo.lock + vendor + .cargo + rpm + LICENSE）
 #          （tests/ 随包提供：验收与冒烟可在包内直接跑全量测试）
 # check  : cargo fmt --check && cargo clippy -D warnings && cargo test --locked
-# msrv   : 用地板工具链（见 Cargo.toml rust-version）做编译级检查
+# msrv   : 用 1.82 工具链做编译级检查
 # ci     : 门禁合集 = check + msrv（push 前在 Linux 机器上过一遍）
 
 VERSION ?= 0.1.0
@@ -25,7 +25,7 @@ STAGE   := dist/fnotify-$(VERSION)
 .PHONY: vendor dist check msrv ci
 
 # MSRV 解析兜底见仓库根 .cargo/config.toml（resolver fallback）。vendor 产物不进
-# 该键：旧版 cargo 不认识，每次构建打一条无害 warning。
+# 该键：cargo 1.82 不认识，每次构建打一条无害 warning。
 vendor:
 	cargo vendor --locked vendor
 	mkdir -p build/.cargo
@@ -51,11 +51,10 @@ dist: vendor
 check:
 	cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked
 
-# MSRV 检查：`cargo +<地板> check --locked`（Linux；macOS 编不了 Linux-only 代码）。
-# 地板工具链见 Cargo.toml 的 rust-version；Cargo.lock 是依赖版本的真正保障
-# （inotify 精确 pin），勿删勿重新解析。
+# MSRV 检查：`cargo +1.82 check --locked`（Linux；macOS 编不了 Linux-only 代码）。
+# Cargo.lock 是 MSRV 的真正保障（inotify 精确 pin），勿删勿重新解析。
 msrv:
-	cargo +1.85 check --locked
+	cargo +1.82 check --locked
 
 ci: check msrv
 	@echo "=> ci gate passed"
