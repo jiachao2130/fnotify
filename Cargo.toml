@@ -1,0 +1,27 @@
+[package]
+name = "fnotify"
+version = "0.1.0"
+authors = ["Jia Chao <jiachao2130@126.com>"]
+edition = "2024"
+rust-version = "1.85"
+license = "MulanPSL-2.0"
+description = "Linux file event router: watch -> debounce -> glob filter -> JSONL / exec"
+repository = "https://github.com/jiachao2130/fnotify"
+publish = false
+
+[dependencies]
+# Linux-only：直接用 inotify，绕开 notify 的跨平台抽象层
+inotify = { version = "=0.11.5", default-features = false }
+mio = { version = "~1.2", default-features = false, features = ["os-poll", "os-ext"] }
+signal-hook = "0.4"
+# 进程组击杀（kill(2)）：libc 本就在依赖树中（inotify 传递依赖），提升为
+# 直接依赖替代外部 kill(1) 调用（不经 PATH 查找、无 shell-out 开销）
+libc = "0.2"
+# TOML 配置文件解析：std + parse + serde（DOM API 在 serde feature 下；~1.0 锁
+# minor，MSRV 1.76，兼容地板）
+toml = { version = "~1.0", default-features = false, features = ["std", "parse", "serde"] }
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
