@@ -58,6 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   与静默窗口语义自洽）；同窗多次触发仍恰交付一条（去重承诺不变）；
   immediate 模式为 leading-edge（首事件已即时发走，不回写）。
   单测 aggregator_merge_takes_trailing_timestamp + 集成 s35 红绿实测。
+- **sw_64 收 SIGTERM 即 abort（申威平台修复）**：vendored libc 0.2.190
+  对 sw_64 无 sigaction 位值覆盖，SA_* 落到 asm-generic 值，SA_SIGINFO
+  位从未到达内核（sw_64 真实 ABI：SA_SIGINFO=0x40、SA_RESTART=0x2），
+  内核按单参约定调用三参 handler、siginfo 为 NULL，signal-hook-registry
+  防御性 abort。Patch0 新增 sw64/bits/sigaction.rs（SA_*/SIG_BLOCK 全套
+  + struct 布局，对齐本机 glibc 头）。sw_64 真机验证：冒烟 TERM 退出
+  exit 0（此前 134 abort），全量测试套件首次在 sw_64 通过。上游
+  rust-libc 补齐 sw_64 sigaction 后本段可撤。
 - **创建风暴下子树永久失聪（正确性缺陷）**：接管/启动注册采用
   add-before-scan 顺序不变式——对任意目录先挂 watch 再枚举子项，快照
   与挂表之间的窗口内新建由该 watch 的 CREATE 兜住，杜绝"整棵子树从此

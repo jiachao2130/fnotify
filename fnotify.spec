@@ -19,8 +19,13 @@ Summary:        File event router: watch -> debounce -> glob filter -> JSONL / e
 License:        MulanPSL-2.0
 URL:            https://github.com/jiachao2130/fnotify
 Source0:        %{name}-%{version}.tar.gz
+# 申威（sw64）支持：给 vendored libc 0.2.190 补 sw64 信号号 / socket 类型定义。
+# 补丁内部按 target_arch = "sw64" 门控，其它架构应用后产物不变；
+# 对应补丁目标的 new/glibc sysdeps 布局仅 0.2.190 起存在，升 libc 须重制补丁
+Patch0:         libc-0.2.190-sw64.patch
 BuildRequires:  rust
 BuildRequires:  cargo
+BuildRequires:  patch
 
 %description
 fnotify watches directories via inotify (Linux), debounces and
@@ -29,7 +34,7 @@ and/or runs a command per event. Synchronous thread model,
 five direct dependencies (inotify, mio, signal-hook, toml, libc).
 
 %prep
-%setup -q
+%autosetup -p1
 
 %build
 cargo build --release
@@ -56,3 +61,9 @@ install -D -m 0644 completions/_fnotify %{buildroot}%{_datadir}/zsh/site-functio
   TOML config, bilingual messages, hardening (CRLF rejection, bounded
   shutdown drain and channel, EACCES subtree warning, byte-exact %p
   paths, process-group kill), -- terminator.
+- Rust 1.82 / edition 2021 baseline (system-toolchain RPM build chain).
+- sw64 (Sunway) support via Patch0 on vendored libc 0.2.190 (sw64
+  signal numbers / socket types, gated by target_arch = "sw64") with a
+  sigaction bit-value override (SA_SIGINFO=0x40 etc.): without it
+  SIGTERM delivery aborted the process (NULL siginfo to the 3-arg
+  handler); verified on sw_64 hardware (full test suite).
